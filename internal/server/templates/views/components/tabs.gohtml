@@ -1,0 +1,44 @@
+<div class="is-flex is-flex-direction-column">
+
+    <div class="tabs">
+        <ul>
+            <li {{ if eq .state.Ticket.SizingType "STORY_POINTS" }}class="is-active"{{end}}>
+                <a hx-patch="/sessions/{{ .sessionID }}/STORY_POINTS" hx-swap="none">
+                    <span class="icon is-small"><i class="bi bi-123"></i></span>
+                    <span>Story Points</span>
+                </a>
+            </li>
+            <li {{ if eq .state.Ticket.SizingType "T_SHIRT" }}class="is-active"{{end}}>
+                <a hx-patch="/sessions/{{ .sessionID }}/T_SHIRT" hx-swap="none">
+                    <span class="icon is-small"><i class="bi bi-person-arms-up"></i></span>
+                    <span>T-Shirt</span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    {{ $usrSizingValue := .state.SizingValue .user }}
+
+    {{ if eq .state.Ticket.SizingType "STORY_POINTS" }}
+        <div class="buttons are-large pt-2">
+            {{ range $sizingValue := .sizingValueStoryPoints }}
+                <button class="button {{ if eq $sizingValue $usrSizingValue}}is-primary{{ end }}"
+                        hx-patch="/sessions/{{ $.sessionID }}/STORY_POINTS/{{ $sizingValue }}" hx-swap="none">
+                    <span class="icon">{{ $sizingValue }}</span>
+                </button>
+            {{ end }}
+        </div>
+    {{ end }}
+
+    {{ if eq .state.Ticket.SizingType "T_SHIRT" }}
+        <div class="buttons are-large pt-2">
+            {{ range $sizingValue := .sizingValueTShirt }}
+                <button class="button {{ if eq $sizingValue $usrSizingValue}}is-primary{{ end }}"
+                        hx-patch="/sessions/{{ $.sessionID }}/T_SHIRT/{{ $sizingValue }}" hx-swap="none">
+                    <span class="icon">{{ $sizingValue }}</span>
+                </button>
+            {{ end }}
+        </div>
+    {{ end }}
+
+</div>

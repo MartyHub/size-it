@@ -1,0 +1,44 @@
+<nav class="navbar is-primary" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+        <a class="navbar-item is-size-4 has-text-weight-medium" href="/">
+            <i class="bi bi-textarea-resize"></i>
+            <span class="ml-3">SizeIt!</span>
+        </a>
+        <a aria-label="menu"
+           aria-expanded="false"
+           class="navbar-burger"
+           data-target="navbarMenu"
+           onclick="this.classList.toggle('is-active'); getElementById('navbarMenu').classList.toggle('is-active');"
+           role="button"
+        >
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+        </a>
+    </div>
+
+    <div class="navbar-menu" id="navbarMenu">
+        <div class="navbar-start">
+            <div class="navbar-item">
+                Sizing session for team {{ .session.Team }} created
+                on {{ .session.CreatedAt.Format "02 January 2006" }}
+            </div>
+            <div class="navbar-item">
+                <div class="buttons">
+                    <button class="button is-link is-small"
+                            onclick="navigator.clipboard.writeText(window.location.href)"
+                    >
+                        Copy session URL to clipboard
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="navbar-end">
+            <div class="navbar-item">
+                <i class="bi bi-person-circle"></i>
+                <span class="ml-2">{{ .user.Name }}</span>
+            </div>
+        </div>
+    </div>
+</nav>

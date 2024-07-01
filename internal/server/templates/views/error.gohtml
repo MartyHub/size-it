@@ -1,0 +1,21 @@
+{{ define "body" }}
+
+    {{ template "nav.gohtml" . }}
+
+    <div class="container mt-6">
+        <article class="message is-danger">
+            <div class="message-header">
+                <p>Error</p>
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <div class="message-body">
+                <p>An unexpected issue occurred:</p>
+                <p class="m-5">{{ .error }}</p>
+                <p>
+                    <a href="/">Click here to go back to home page</a>
+                </p>
+            </div>
+        </article>
+    </div>
+
+{{ end }}
