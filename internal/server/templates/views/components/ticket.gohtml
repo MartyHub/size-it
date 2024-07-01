@@ -1,0 +1,52 @@
+<div>
+
+    <input name="ticketId" type="hidden" value="{{ .state.Ticket.ID }}">
+
+    <div class="field pt-2">
+        <label class="label" for="summary">Summary</label>
+        <div class="control">
+            <input
+                    autocomplete="off"
+                    class="input is-success"
+                    hx-patch="/sessions/{{ .sessionID }}"
+                    hx-trigger="keyup changed delay:250ms"
+                    hx-swap="none"
+                    id="summary"
+                    maxlength="512"
+                    name="summary"
+                    type="text"
+                    value="{{ .state.Ticket.Summary }}"
+            >
+        </div>
+    </div>
+
+    <label class="label" for="url">URL</label>
+
+    <div class="field has-addons">
+        <div class="control is-expanded">
+            <input
+                    autocomplete="off"
+                    class="input is-info"
+                    hx-patch="/sessions/{{ .sessionID }}"
+                    hx-trigger="keyup changed delay:250ms"
+                    hx-swap="none"
+                    id="url"
+                    maxlength="512"
+                    name="url"
+                    spellcheck="false"
+                    type="url"
+                    value="{{ .state.Ticket.URL }}"
+            >
+        </div>
+        <div class="control">
+            <a class="button is-info"
+               href="{{ .state.Ticket.URL }}"
+               rel="noreferrer"
+               target="_blank"
+               {{ if not .state.Ticket.URL }}disabled{{ end }}>
+                <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+        </div>
+    </div>
+
+</div>

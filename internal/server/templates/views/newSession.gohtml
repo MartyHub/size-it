@@ -1,0 +1,73 @@
+{{ define "body" }}
+
+    {{ template "welcome.gohtml" . }}
+
+    <section class="section">
+        <h1 class="title">Please fill the following fields to start a new sizing session:</h1>
+
+        <div class="container">
+            <div class="columns">
+                <div class="column is-two-fifths">
+                    <form action="/sessions" method="post">
+
+                        <div class="field">
+                            <label class="label" for="username">Username</label>
+                            <div class="control has-icons-left">
+                                <input
+                                        autocomplete="off"
+                                        class="input is-success"
+                                        id="username"
+                                        maxlength="32"
+                                        name="username"
+                                        placeholder="John"
+                                        type="text"
+                                        value="{{ .user.Name }}"
+                                        autofocus
+                                        required
+                                >
+                                <span class="icon is-small is-left"><i class="bi bi-person-fill"></i></span>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label" for="team">Team</label>
+                            <div class="control has-icons-left">
+                                <input
+                                        autocomplete="off"
+                                        class="input is-info"
+                                        id="team"
+                                        list="teams"
+                                        maxlength="32"
+                                        name="team"
+                                        placeholder="Acme"
+                                        spellcheck="false"
+                                        value="{{ .user.Team }}"
+                                        required
+                                >
+                                <span class="icon is-small is-left"><i class="bi bi-people-fill"></i></span>
+                            </div>
+                            <datalist id="teams">
+                                {{ range $team := .teams }}
+                                    <option value="{{ $team }}">
+                                        {{ $team }}
+                                    </option>
+                                {{ end }}
+                            </datalist>
+                        </div>
+
+                        <div class="field">
+                            <div class="control">
+                                <input class="button is-primary mt-5"
+                                       type="submit"
+                                       value="Start New Session"
+                                >
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+{{ end }}

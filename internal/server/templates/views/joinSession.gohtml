@@ -1,0 +1,51 @@
+{{ define "body" }}
+
+    {{ template "welcome.gohtml" . }}
+
+    <section class="section">
+        <h1 class="title">Please enter your username to join sizing session:</h1>
+
+        <div class="container">
+            <div class="columns">
+                <div class="column is-two-fifths">
+                    <form action="/sessions" method="post">
+
+                        <div class="field">
+                            <label class="label" for="username">Username</label>
+                            <div class="control has-icons-left">
+                                <input
+                                        autocomplete="off"
+                                        class="input {{ if .error }} is-danger {{ else }} is-success {{ end }}"
+                                        id="username"
+                                        maxlength="32"
+                                        name="username"
+                                        placeholder="John"
+                                        type="text"
+                                        value="{{ .user.Name }}"
+                                        autofocus
+                                        required
+                                >
+                                <span class="icon is-small is-left"><i class="bi bi-person-fill"></i></span>
+                            </div>
+                            {{ if eq .error "DUPLICATE_USERNAME" }}
+                                <p class="help is-danger">This username is already used</p>
+                            {{ end }}
+                        </div>
+
+                        <div class="field">
+                            <div class="control">
+                                <input name="id" type="hidden" value="{{ .session.ID }}">
+                                <input class="button is-primary mt-5"
+                                       type="submit"
+                                       value="Join Session"
+                                >
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+{{ end }}

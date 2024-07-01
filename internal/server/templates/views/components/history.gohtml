@@ -1,0 +1,27 @@
+<div>
+    <h1 class="title">History</h1>
+    <table class="table is-striped is-hoverable is-fullwidth">
+        <thead>
+        <tr>
+            <th>Ticket</th>
+            <th class="has-text-centered">Sizing</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{ range $ticket := .state.History }}
+            <tr>
+                <td class="is-overflow-hidden" style="max-width: 500px; text-overflow: ellipsis; white-space: nowrap">
+                    {{ if $ticket.URL }}
+                        <a href="{{ $ticket.URL }}" rel="noreferrer" target="_blank">
+                            {{ $ticket.Summary }}
+                        </a>
+                    {{ else }}
+                        {{ $ticket.Summary }}
+                    {{ end }}
+                </td>
+                <td class="has-text-centered">{{ $ticket.SizingValue }}</td>
+            </tr>
+        {{ end }}
+        </tbody>
+    </table>
+</div>
