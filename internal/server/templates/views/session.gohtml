@@ -1,0 +1,83 @@
+{{ define "body" }}
+
+    {{ template "navSession.gohtml" . }}
+
+    <div hx-ext="sse" sse-connect="/sessions/{{ .sessionID }}">
+
+        <section class="section">
+
+            <form>
+
+                <div class="title is-flex is-flex-direction-row is-justify-content-space-between is-align-items-center">
+                    <span>Ticket</span>
+                    <div class="field is-grouped">
+                        <p class="control">
+                            <button
+                                    class="button is-primary px-6 is-small"
+                                    hx-post="/sessions/{{ .sessionID }}"
+                                    hx-swap="none"
+                            >
+                                Save
+                            </button>
+                        </p>
+                        <p class="control">
+                            <button
+                                    class="button is-danger px-6 is-small"
+                                    hx-put="/sessions/{{ .sessionID }}"
+                                    hx-swap="none"
+                            >
+                                Reset
+                            </button>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="columns">
+                    <div
+                            class="column is-three-fifths"
+                            hx-ext="sse"
+                            id="ticket"
+                            sse-swap="ticket"
+                    >
+                        {{ template "ticket.gohtml" . }}
+                    </div>
+                    <div
+                            class="column"
+                            hx-ext="sse"
+                            id="tabs"
+                            sse-swap="tabs"
+                    >
+                        {{ template "tabs.gohtml" . }}
+                    </div>
+                </div>
+
+            </form>
+
+        </section>
+
+        <section class="section pt-0">
+
+            <div class="columns">
+                <div
+                        class="column is-three-fifths"
+                        hx-ext="sse"
+                        id="history"
+                        sse-swap="history"
+                >
+                    {{ template "history.gohtml" . }}
+                </div>
+                <div
+                        class="column"
+                        hx-ext="sse"
+                        id="results"
+                        sse-swap="results"
+                >
+                    {{ template "results.gohtml" . }}
+                </div>
+            </div>
+
+        </section>
+
+    </div>
+
+{{ end }}

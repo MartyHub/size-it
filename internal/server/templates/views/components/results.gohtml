@@ -1,0 +1,38 @@
+<div>
+    <h1 class="title is-flex is-flex-direction-row is-justify-content-space-between is-align-items-center">
+        <span>Results</span>
+        <button
+                class="button is-link px-6 is-small"
+                hx-patch="/sessions/{{ .sessionID }}/toggle"
+                hx-swap="none"
+        >
+            {{ if .state.Show }}
+                Hide
+            {{ else }}
+                Show
+            {{ end }}
+        </button>
+    </h1>
+    <table class="table is-striped is-hoverable is-fullwidth">
+        <thead>
+        <tr>
+            <th>Username</th>
+            <th class="has-text-centered">Sizing</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{ range $result := .state.Results }}
+            <tr>
+                <td>{{ $result.UserName }}</td>
+                <td class="has-text-centered">
+                    {{ if $.state.Show }}
+                        {{ $result.Sizing }}
+                    {{ else if $result.Sizing }}
+                        <i class="bi bi-check-circle-fill"></i>
+                    {{ end }}
+                </td>
+            </tr>
+        {{ end }}
+        </tbody>
+    </table>
+</div>

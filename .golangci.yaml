@@ -1,0 +1,28 @@
+run:
+  modules-download-mode: readonly
+
+output:
+  sort-results: true
+
+linters:
+  disable:
+    - depguard
+    - exhaustruct
+    - paralleltest
+    - testpackage
+    - varnamelen
+    - wrapcheck
+  presets:
+    - bugs
+    - comment
+    - complexity
+    - error
+    - format
+    - import
+    - metalinter
+    - module
+    - performance
+    - sql
+    - style
+    - test
+    - unused
