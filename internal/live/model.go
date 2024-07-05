@@ -13,8 +13,8 @@ const (
 )
 
 var (
-	SizingValueStoryPoints = []string{"1", "2", "3", "5", "8", "13", "﹖"}    //nolint:gochecknoglobals
-	SizingValueTShirt      = []string{"XS", "S", "M", "L", "XL", "XXL", "﹖"} //nolint:gochecknoglobals
+	SizingValueStoryPoints = []string{"1", "2", "3", "5", "8", "13", "20", "40", "﹖"} //nolint:gochecknoglobals
+	SizingValueTShirt      = []string{"XS", "S", "M", "L", "XL", "XXL", "﹖"}          //nolint:gochecknoglobals
 )
 
 type (
@@ -29,8 +29,6 @@ type (
 		Results []result
 		Show    bool
 		Team    string
-
-		clients map[chan Event]internal.User
 	}
 
 	ticket struct {
@@ -42,9 +40,9 @@ type (
 	}
 
 	result struct {
-		UserID   string
-		UserName string
-		Sizing   string
+		events chan Event
+		User   internal.User
+		Sizing string
 	}
 )
 
@@ -62,7 +60,7 @@ func (evt Event) Write(w io.Writer) error {
 
 func (s *state) SizingValue(usr internal.User) string {
 	for _, res := range s.Results {
-		if res.UserID == usr.ID && res.UserName == usr.Name {
+		if res.User == usr {
 			return res.Sizing
 		}
 	}

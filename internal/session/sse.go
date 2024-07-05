@@ -1,6 +1,8 @@
 package session
 
 import (
+	"log/slog"
+
 	"github.com/MartyHub/size-it/internal"
 	"github.com/MartyHub/size-it/internal/live"
 	"github.com/labstack/echo/v4"
@@ -27,12 +29,21 @@ func (hdl *handlerSSE) handle(c echo.Context) error {
 			return nil
 		case <-c.Request().Context().Done():
 			// client is gone
-			hdl.svc.Leave(hdl.session.ID, hdl.usr, hdl.events)
+			hdl.svc.Leave(hdl.session.ID, hdl.usr)
 
 			return nil
-		case evt := <-hdl.events:
+		case evt, ok := <-hdl.events:
+			if !ok {
+				slog.Info("User left session without notice",
+					slog.String(internal.LogKeyUser, hdl.usr.Name),
+					slog.String("session", hdl.session.ID),
+				)
+
+				return nil
+			}
+
 			if err := hdl.writeEvent(c, evt); err != nil {
-				hdl.svc.Leave(hdl.session.ID, hdl.usr, hdl.events)
+				hdl.svc.Leave(hdl.session.ID, hdl.usr)
 
 				return err
 			}

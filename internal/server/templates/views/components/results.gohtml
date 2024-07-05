@@ -23,7 +23,7 @@
         <tbody>
         {{ range $result := .state.Results }}
             <tr>
-                <td>{{ $result.UserName }}</td>
+                <td>{{ $result.User.Name }}</td>
                 <td class="has-text-centered">
                     {{ if $.state.Show }}
                         {{ $result.Sizing }}

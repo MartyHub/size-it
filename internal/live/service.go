@@ -36,7 +36,7 @@ func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
 	}
 }
 
-func (svc *Service) Join(sessionID string, usr internal.User, client chan Event) error {
+func (svc *Service) Join(sessionID string, usr internal.User, events chan Event) error {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
@@ -45,21 +45,24 @@ func (svc *Service) Join(sessionID string, usr internal.User, client chan Event)
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
 
-	if slices.ContainsFunc(s.Results, func(res result) bool {
-		return usr.Is(res.UserID)
-	}) {
-		return nil
-	}
-
 	slog.Info("User joining session",
 		slog.String(internal.LogKeyUser, usr.Name),
 		slog.String("session", sessionID),
 	)
 
-	s.clients[client] = usr
+	s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
+		if res.User == usr {
+			close(res.events)
+
+			return true
+		}
+
+		return false
+	})
+
 	s.Results = append(s.Results, result{
-		UserID:   usr.ID,
-		UserName: usr.Name,
+		User:   usr,
+		events: events,
 	})
 
 	if err := svc.notifyTicket(sessionID, s); err != nil {
@@ -81,7 +84,7 @@ func (svc *Service) Join(sessionID string, usr internal.User, client chan Event)
 	return nil
 }
 
-func (svc *Service) Leave(sessionID string, usr internal.User, client chan Event) {
+func (svc *Service) Leave(sessionID string, usr internal.User) {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
@@ -95,10 +98,8 @@ func (svc *Service) Leave(sessionID string, usr internal.User, client chan Event
 		slog.String("session", sessionID),
 	)
 
-	delete(s.clients, client)
-
 	s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-		return usr.Is(res.UserID)
+		return res.User == usr
 	})
 
 	if len(s.Results) == 0 {
@@ -151,7 +152,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 	}
 
 	for _, res := range s.Results {
-		if usr.Is(res.UserID) {
+		if res.User == usr {
 			s.Ticket.SizingValue = res.Sizing
 
 			break
@@ -234,7 +235,7 @@ func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.U
 	}
 
 	for i, res := range s.Results {
-		if usr.Is(res.UserID) {
+		if res.User == usr {
 			s.Results[i].Sizing = sizingValue
 
 			break
@@ -288,7 +289,6 @@ func (svc *Service) init(ctx context.Context, team string) (*state, error) {
 		Ticket:  &ticket{SizingType: defaultSizingType},
 		History: history,
 		Team:    team,
-		clients: make(map[chan Event]internal.User),
 	}
 
 	return res, nil
@@ -362,11 +362,13 @@ func (svc *Service) notify(sessionID, kind, template string, s *state) error {
 		return err
 	}
 
-	for clt := range s.clients {
-		clt <- Event{
-			Kind: kind,
-			Data: bytes.ReplaceAll(buf.Bytes(), []byte{'\n'}, []byte{}),
-		}
+	evt := Event{
+		Kind: kind,
+		Data: bytes.ReplaceAll(buf.Bytes(), []byte{'\n'}, []byte{}),
+	}
+
+	for _, res := range s.Results {
+		res.events <- evt
 	}
 
 	return nil
@@ -377,14 +379,14 @@ func (svc *Service) notifyByUser(sessionID, kind, template string, s *state) err
 
 	slog.Info("Broadcasting by user...", slog.String("event", kind))
 
-	for clt, usr := range s.clients {
+	for _, res := range s.Results {
 		data := map[string]any{
 			"path":                   svc.path,
 			"sessionID":              sessionID,
 			"sizingValueStoryPoints": SizingValueStoryPoints,
 			"sizingValueTShirt":      SizingValueTShirt,
 			"state":                  s,
-			"user":                   usr,
+			"user":                   res.User,
 		}
 
 		buf.Reset()
@@ -393,7 +395,7 @@ func (svc *Service) notifyByUser(sessionID, kind, template string, s *state) err
 			return err
 		}
 
-		clt <- Event{
+		res.events <- Event{
 			Kind: kind,
 			Data: bytes.ReplaceAll(buf.Bytes(), []byte{'\n'}, []byte{}),
 		}
