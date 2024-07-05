@@ -6,8 +6,8 @@ select *
 
 -- name: CreateSession :one
 insert into session
-    (team, created_at) values
-    (@team, @created_at)
+    (id, team, created_at) values
+    (@id, @team, @created_at)
 returning *
 ;
 

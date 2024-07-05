@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -19,7 +20,7 @@ var migrations embed.FS
 type Repository struct {
 	*sqlc.Queries
 
-	Pool *pgxpool.Pool
+	pool *pgxpool.Pool
 }
 
 func NewRepository(ctx context.Context, connString string) (*Repository, error) {
@@ -31,31 +32,31 @@ func NewRepository(ctx context.Context, connString string) (*Repository, error) 
 	}
 
 	result := &Repository{
-		Pool:    pool,
 		Queries: sqlc.New(pool),
+		pool:    pool,
 	}
 
 	return result, nil
 }
 
 func (repo *Repository) Close() {
-	repo.Pool.Close()
+	repo.pool.Close()
 }
 
 func (repo *Repository) Migrate(ctx context.Context) error {
 	slog.Info("Migrating database...")
 
-	return repo.Pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
+	return repo.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
 		return repo.doMigrate(ctx, conn.Conn())
 	})
 }
 
 func (repo *Repository) Ping(ctx context.Context) error {
-	return repo.Pool.Ping(ctx)
+	return repo.pool.Ping(ctx)
 }
 
 func (repo *Repository) Timezone(ctx context.Context) (string, error) {
-	rows, err := repo.Pool.Query(ctx, "show timezone")
+	rows, err := repo.pool.Query(ctx, "show timezone")
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +70,7 @@ func (repo *Repository) Timezone(ctx context.Context) (string, error) {
 }
 
 func (repo *Repository) Version(ctx context.Context) (string, error) {
-	rows, err := repo.Pool.Query(ctx, "select version()")
+	rows, err := repo.pool.Query(ctx, "select version()")
 	if err != nil {
 		return "", err
 	}
@@ -102,4 +103,8 @@ func (repo *Repository) doMigrate(ctx context.Context, conn *pgx.Conn) error {
 	}
 
 	return m.Migrate(ctx)
+}
+
+func IsErrNoRows(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows)
 }

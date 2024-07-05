@@ -286,9 +286,10 @@ func (svc *Service) init(ctx context.Context, team string) (*state, error) {
 	}
 
 	res := &state{
-		Ticket:  &ticket{SizingType: defaultSizingType},
 		History: history,
+		Results: make([]result, 0, 1),
 		Team:    team,
+		Ticket:  &ticket{SizingType: defaultSizingType},
 	}
 
 	return res, nil
@@ -423,17 +424,12 @@ func (svc *Service) doSaveTicket(ctx context.Context, sessionID string, s *state
 	} else {
 		slog.Info("Creating ticket...", slog.String("session", sessionID))
 
-		uuid, err := internal.ParseUUID(sessionID)
-		if err != nil {
-			return err
-		}
-
 		tck, err := svc.repo.CreateTicket(ctx, sqlc.CreateTicketParams{
 			Summary:     s.Ticket.Summary,
 			Url:         s.Ticket.URL,
 			SizingType:  s.Ticket.SizingType,
 			SizingValue: s.Ticket.SizingValue,
-			SessionID:   *uuid,
+			SessionID:   sessionID,
 		})
 		if err != nil {
 			return err

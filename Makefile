@@ -11,7 +11,7 @@ clean:
 db_up:
 	./scripts/db_up.sh
 
-db_init:
+db_init: db_up
 	./scripts/db_init.sh
 
 db_down:

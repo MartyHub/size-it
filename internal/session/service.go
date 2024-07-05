@@ -2,12 +2,14 @@ package session
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 
 	"github.com/MartyHub/size-it/internal"
 	"github.com/MartyHub/size-it/internal/db"
 	"github.com/MartyHub/size-it/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oklog/ulid/v2"
 )
 
 type service struct {
@@ -23,7 +25,13 @@ func newService(clk internal.Clock, repo *db.Repository) *service {
 }
 
 func (svc *service) create(ctx context.Context, input CreateOrJoinSessionInput) (Session, error) {
+	id, err := ulid.New(ulid.Now(), rand.Reader)
+	if err != nil {
+		return Session{}, err
+	}
+
 	entity, err := svc.repo.CreateSession(ctx, sqlc.CreateSessionParams{
+		ID:        id.String(),
 		Team:      input.Team,
 		CreatedAt: pgtype.Timestamp{Time: svc.clk.Now(), Valid: true},
 	})
@@ -35,14 +43,9 @@ func (svc *service) create(ctx context.Context, input CreateOrJoinSessionInput) 
 }
 
 func (svc *service) get(ctx context.Context, id string) (Session, error) {
-	uuid, err := internal.ParseUUID(id)
+	entity, err := svc.repo.Session(ctx, id)
 	if err != nil {
-		return Session{}, err
-	}
-
-	entity, err := svc.repo.Session(ctx, *uuid)
-	if err != nil {
-		if internal.IsErrNoRows(err) {
+		if db.IsErrNoRows(err) {
 			return Session{}, fmt.Errorf("%w: session %s", internal.ErrNotFound, id)
 		}
 

@@ -1,6 +1,6 @@
 create table session
 (
-    id         uuid        not null default gen_random_uuid(),
+    id         varchar(26) not null,
     team       varchar(32) not null,
     created_at timestamp   not null,
     constraint session_pk primary key (id)

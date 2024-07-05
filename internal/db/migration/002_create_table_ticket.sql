@@ -1,7 +1,7 @@
 create table ticket
 (
     id           bigint       not null generated always as identity,
-    session_id   uuid         not null,
+    session_id   varchar(26)  not null,
     summary      varchar(512) not null,
     url          varchar(512) not null,
     sizing_type  varchar(16)  not null,
