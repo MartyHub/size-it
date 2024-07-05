@@ -21,13 +21,15 @@ const (
 
 type Service struct {
 	lock             sync.RWMutex
+	path             string
 	rdr              echo.Renderer
 	repo             *db.Repository
 	stateBySessionID map[string]*state
 }
 
-func NewService(rdr echo.Renderer, repo *db.Repository) *Service {
+func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
 	return &Service{
+		path:             path,
 		rdr:              rdr,
 		repo:             repo,
 		stateBySessionID: make(map[string]*state),
@@ -343,6 +345,7 @@ func (svc *Service) notify(sessionID, kind, template string, s *state) error {
 	var buf bytes.Buffer
 
 	data := map[string]any{
+		"path":                   svc.path,
 		"sessionID":              sessionID,
 		"sizingValueStoryPoints": SizingValueStoryPoints,
 		"sizingValueTShirt":      SizingValueTShirt,
@@ -370,6 +373,7 @@ func (svc *Service) notifyByUser(sessionID, kind, template string, s *state) err
 
 	for clt, usr := range s.clients {
 		data := map[string]any{
+			"path":                   svc.path,
 			"sessionID":              sessionID,
 			"sizingValueStoryPoints": SizingValueStoryPoints,
 			"sizingValueTShirt":      SizingValueTShirt,

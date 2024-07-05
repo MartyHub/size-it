@@ -11,6 +11,7 @@ type Config struct {
 	DatabaseURL string
 	Dev         bool
 	Host        string
+	Path        string
 	Port        int `envDefault:"8080"`
 }
 

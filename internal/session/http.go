@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"net/http"
+	"path"
 
 	"github.com/MartyHub/size-it/internal"
 	"github.com/MartyHub/size-it/internal/live"
@@ -14,6 +15,7 @@ const sseBufferSize = 8
 
 func Register(srv *server.Server) {
 	hdl := &handler{
+		path:  srv.Cfg.Path,
 		rdr:   srv.Renderer(),
 		done:  srv.Done(),
 		svc:   newService(srv.Clk, srv.Repo),
@@ -36,6 +38,7 @@ const mimeSSE = "text/event-stream"
 type handler struct {
 	rdr   echo.Renderer
 	done  <-chan struct{}
+	path  string
 	svc   *service
 	event *live.Service
 }
@@ -54,6 +57,7 @@ func (hdl *handler) root(c echo.Context) error {
 	}
 
 	return c.Render(http.StatusOK, "newSession.gohtml", map[string]any{
+		"path":  hdl.path,
 		"teams": teams,
 		"user":  usr,
 	})
@@ -94,7 +98,7 @@ func (hdl *handler) createOrJoinSession(c echo.Context) error {
 		return err
 	}
 
-	return c.Redirect(http.StatusFound, "/sessions/"+session.ID)
+	return c.Redirect(http.StatusFound, path.Join(hdl.path, "sessions", session.ID))
 }
 
 func (hdl *handler) getSession(c echo.Context) error {
@@ -120,6 +124,7 @@ func (hdl *handler) getSession(c echo.Context) error {
 
 		if errors.Is(err, internal.ErrUnauthorized) {
 			return c.Render(http.StatusOK, "joinSession.gohtml", map[string]any{
+				"path":    hdl.path,
 				"session": session,
 				"user":    usr,
 			})
@@ -145,6 +150,7 @@ func (hdl *handler) getSession(c echo.Context) error {
 	}
 
 	return c.Render(http.StatusOK, "session.gohtml", map[string]any{
+		"path":                   hdl.path,
 		"session":                session,
 		"sessionID":              session.ID,
 		"sizingValueStoryPoints": live.SizingValueStoryPoints,
