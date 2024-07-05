@@ -17,12 +17,10 @@
         </ul>
     </div>
 
-    {{ $usrSizingValue := .state.SizingValue .user }}
-
     {{ if eq .state.Ticket.SizingType "STORY_POINTS" }}
         <div class="buttons are-large pt-2">
             {{ range $sizingValue := .sizingValueStoryPoints }}
-                <button class="button {{ if eq $sizingValue $usrSizingValue}}is-primary{{ end }}"
+                <button class="button {{ if eq $sizingValue $.userSizingValue}}is-primary{{ end }}"
                         hx-patch="{{ $.path }}/sessions/{{ $.sessionID }}/STORY_POINTS/{{ $sizingValue }}" hx-swap="none">
                     <span class="icon">{{ $sizingValue }}</span>
                 </button>
@@ -33,7 +31,7 @@
     {{ if eq .state.Ticket.SizingType "T_SHIRT" }}
         <div class="buttons are-large pt-2">
             {{ range $sizingValue := .sizingValueTShirt }}
-                <button class="button {{ if eq $sizingValue $usrSizingValue}}is-primary{{ end }}"
+                <button class="button {{ if eq $sizingValue $.userSizingValue}}is-primary{{ end }}"
                         hx-patch="{{ $.path }}/sessions/{{ $.sessionID }}/T_SHIRT/{{ $sizingValue }}" hx-swap="none">
                     <span class="icon">{{ $sizingValue }}</span>
                 </button>

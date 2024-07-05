@@ -167,11 +167,12 @@ func (hdl *handler) saveTicket(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
-	if _, err = internal.GetUser(ctx); err != nil {
+	usr, err := internal.GetUser(ctx)
+	if err != nil {
 		return err
 	}
 
-	if err = hdl.event.SaveTicket(input.SessionID, input.Summary, input.URL); err != nil {
+	if err = hdl.event.SaveTicket(input.SessionID, input.Summary, input.URL, usr); err != nil {
 		return err
 	}
 

@@ -32,10 +32,6 @@ type (
 	contextKey int
 )
 
-func (usr User) Is(id string) bool {
-	return usr.ID == id
-}
-
 func UserID() (string, error) {
 	bytes := make([]byte, userIDSize)
 

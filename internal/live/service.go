@@ -1,7 +1,6 @@
 package live
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -21,16 +20,17 @@ const (
 
 type Service struct {
 	lock             sync.RWMutex
-	path             string
-	rdr              echo.Renderer
+	ntf              *notifier
 	repo             *db.Repository
 	stateBySessionID map[string]*state
 }
 
 func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
 	return &Service{
-		path:             path,
-		rdr:              rdr,
+		ntf: &notifier{
+			path: path,
+			rdr:  rdr,
+		},
 		repo:             repo,
 		stateBySessionID: make(map[string]*state),
 	}
@@ -41,22 +41,23 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 	defer svc.lock.Unlock()
 
 	s, found := svc.stateBySessionID[sessionID]
-	if !found {
-		session, err := svc.repo.Session(ctx, sessionID)
-		if err != nil {
-			if db.IsErrNoRows(err) {
-				return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
+	if found {
+		s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
+			if res.User == usr {
+				close(res.events)
+
+				return true
 			}
 
-			return err
-		}
+			return false
+		})
+	} else {
+		var err error
 
-		s, err = svc.init(ctx, session.Team)
+		s, err = svc.doCreate(ctx, sessionID)
 		if err != nil {
 			return err
 		}
-
-		svc.stateBySessionID[sessionID] = s
 	}
 
 	slog.Info("User joining session",
@@ -64,34 +65,26 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 		slog.String("session", sessionID),
 	)
 
-	s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-		if res.User == usr {
-			close(res.events)
-
-			return true
-		}
-
-		return false
-	})
-
 	s.Results = append(s.Results, result{
 		User:   usr,
 		events: events,
 	})
 
-	if err := svc.notifyTicket(sessionID, s); err != nil {
+	notifyUser := includeUser(usr)
+
+	if err := svc.ntf.notifyTicket(sessionID, s, notifyUser); err != nil {
 		return err
 	}
 
-	if err := svc.notifyTabs(sessionID, s); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, notifyUser, false); err != nil {
 		return err
 	}
 
-	if err := svc.notifyHistory(sessionID, s); err != nil {
+	if err := svc.ntf.notifyHistory(sessionID, s, notifyUser); err != nil {
 		return err
 	}
 
-	if err := svc.notifyResults(sessionID, s); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
 		return err
 	}
 
@@ -122,7 +115,7 @@ func (svc *Service) Leave(sessionID string, usr internal.User) {
 		return
 	}
 
-	_ = svc.notifyResults(sessionID, s)
+	_ = svc.ntf.notifyResults(sessionID, s, allUsers())
 }
 
 func (svc *Service) Create(ctx context.Context, sessionID, team string) error {
@@ -141,7 +134,7 @@ func (svc *Service) Create(ctx context.Context, sessionID, team string) error {
 	return nil
 }
 
-func (svc *Service) SaveTicket(sessionID, summary, url string) error {
+func (svc *Service) SaveTicket(sessionID, summary, url string, usr internal.User) error {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
@@ -153,7 +146,7 @@ func (svc *Service) SaveTicket(sessionID, summary, url string) error {
 	s.Ticket.Summary = summary
 	s.Ticket.URL = url
 
-	return svc.notifyTicket(sessionID, s)
+	return svc.ntf.notifyTicket(sessionID, s, excludeUser(usr))
 }
 
 func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, usr internal.User) error {
@@ -188,7 +181,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 
 	s.History = history
 
-	return svc.notifyHistory(sessionID, s)
+	return svc.ntf.notifyHistory(sessionID, s, allUsers())
 }
 
 func (svc *Service) ToggleSizings(sessionID string) error {
@@ -202,7 +195,7 @@ func (svc *Service) ToggleSizings(sessionID string) error {
 
 	s.Show = !s.Show
 
-	return svc.notifyResults(sessionID, s)
+	return svc.ntf.notifyResults(sessionID, s, allUsers())
 }
 
 func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType string) error {
@@ -221,11 +214,11 @@ func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType 
 		s.Results[i].Sizing = ""
 	}
 
-	if err := svc.notifyTabs(sessionID, s); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, allUsers(), false); err != nil {
 		return err
 	}
 
-	if err := svc.notifyResults(sessionID, s); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
 		return err
 	}
 
@@ -236,7 +229,7 @@ func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType 
 
 	s.History = history
 
-	return svc.notifyHistory(sessionID, s)
+	return svc.ntf.notifyHistory(sessionID, s, allUsers())
 }
 
 func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.User) error {
@@ -256,11 +249,11 @@ func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.U
 		}
 	}
 
-	if err := svc.notifyTabs(sessionID, s); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, includeUser(usr), true); err != nil {
 		return err
 	}
 
-	if err := svc.notifyResults(sessionID, s); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
 		return err
 	}
 
@@ -278,15 +271,15 @@ func (svc *Service) ResetSession(sessionID string) error {
 
 	s.reset()
 
-	if err := svc.notifyTicket(sessionID, s); err != nil {
+	if err := svc.ntf.notifyTicket(sessionID, s, allUsers()); err != nil {
 		return err
 	}
 
-	if err := svc.notifyTabs(sessionID, s); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, allUsers(), false); err != nil {
 		return err
 	}
 
-	if err := svc.notifyResults(sessionID, s); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
 		return err
 	}
 
@@ -344,81 +337,6 @@ func (svc *Service) history(ctx context.Context, team, sizingType string) ([]tic
 	return []ticket{}, nil
 }
 
-func (svc *Service) notifyTicket(sessionID string, s *state) error {
-	return svc.notify(sessionID, "ticket", "components/ticket.gohtml", s)
-}
-
-func (svc *Service) notifyTabs(sessionID string, s *state) error {
-	return svc.notifyByUser(sessionID, "tabs", "components/tabs.gohtml", s)
-}
-
-func (svc *Service) notifyHistory(sessionID string, s *state) error {
-	return svc.notify(sessionID, "history", "components/history.gohtml", s)
-}
-
-func (svc *Service) notifyResults(sessionID string, s *state) error {
-	return svc.notify(sessionID, "results", "components/results.gohtml", s)
-}
-
-func (svc *Service) notify(sessionID, kind, template string, s *state) error {
-	slog.Info("Broadcasting...", slog.String("event", kind))
-
-	var buf bytes.Buffer
-
-	data := map[string]any{
-		"path":                   svc.path,
-		"sessionID":              sessionID,
-		"sizingValueStoryPoints": SizingValueStoryPoints,
-		"sizingValueTShirt":      SizingValueTShirt,
-		"state":                  s,
-	}
-
-	if err := svc.rdr.Render(&buf, template, data, nil); err != nil {
-		return err
-	}
-
-	evt := Event{
-		Kind: kind,
-		Data: bytes.ReplaceAll(buf.Bytes(), []byte{'\n'}, []byte{}),
-	}
-
-	for _, res := range s.Results {
-		res.events <- evt
-	}
-
-	return nil
-}
-
-func (svc *Service) notifyByUser(sessionID, kind, template string, s *state) error {
-	var buf bytes.Buffer
-
-	slog.Info("Broadcasting by user...", slog.String("event", kind))
-
-	for _, res := range s.Results {
-		data := map[string]any{
-			"path":                   svc.path,
-			"sessionID":              sessionID,
-			"sizingValueStoryPoints": SizingValueStoryPoints,
-			"sizingValueTShirt":      SizingValueTShirt,
-			"state":                  s,
-			"user":                   res.User,
-		}
-
-		buf.Reset()
-
-		if err := svc.rdr.Render(&buf, template, data, nil); err != nil {
-			return err
-		}
-
-		res.events <- Event{
-			Kind: kind,
-			Data: bytes.ReplaceAll(buf.Bytes(), []byte{'\n'}, []byte{}),
-		}
-	}
-
-	return nil
-}
-
 func (svc *Service) doSaveTicket(ctx context.Context, sessionID string, s *state) error {
 	if s.Ticket.ID > 0 {
 		slog.Info("Updating ticket...",
@@ -453,6 +371,44 @@ func (svc *Service) doSaveTicket(ctx context.Context, sessionID string, s *state
 	}
 
 	return nil
+}
+
+func (svc *Service) doCreate(ctx context.Context, sessionID string) (*state, error) {
+	session, err := svc.repo.Session(ctx, sessionID)
+	if err != nil {
+		if db.IsErrNoRows(err) {
+			return nil, fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
+		}
+
+		return nil, err
+	}
+
+	s, err := svc.init(ctx, session.Team)
+	if err != nil {
+		return nil, err
+	}
+
+	svc.stateBySessionID[sessionID] = s
+
+	return s, nil
+}
+
+func allUsers() notifyUserFunc {
+	return func(_ internal.User) bool {
+		return true
+	}
+}
+
+func includeUser(usr internal.User) notifyUserFunc {
+	return func(remoteUser internal.User) bool {
+		return remoteUser == usr
+	}
+}
+
+func excludeUser(usr internal.User) notifyUserFunc {
+	return func(remoteUser internal.User) bool {
+		return remoteUser != usr
+	}
 }
 
 func sortTickets(ticketsByValue map[string][]ticket, keys []string) []ticket {

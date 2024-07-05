@@ -21,9 +21,8 @@ type (
 	PatchSessionInput struct {
 		SessionID string `param:"id"`
 
-		TicketID string `form:"ticketId"`
-		Summary  string `form:"summary"`
-		URL      string `form:"url"`
+		Summary string `form:"summary"`
+		URL     string `form:"url"`
 	}
 
 	PatchSizingTypeInput struct {
