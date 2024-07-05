@@ -101,6 +101,12 @@ func (svc *Service) Leave(sessionID string, usr internal.User, client chan Event
 		return usr.Is(res.UserID)
 	})
 
+	if len(s.Results) == 0 {
+		delete(svc.stateBySessionID, sessionID)
+
+		return
+	}
+
 	_ = svc.notifyResults(sessionID, s)
 }
 
