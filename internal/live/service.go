@@ -36,13 +36,27 @@ func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
 	}
 }
 
-func (svc *Service) Join(sessionID string, usr internal.User, events chan Event) error {
+func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.User, events chan Event) error {
 	svc.lock.Lock()
 	defer svc.lock.Unlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
-		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
+		session, err := svc.repo.Session(ctx, sessionID)
+		if err != nil {
+			if db.IsErrNoRows(err) {
+				return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
+			}
+
+			return err
+		}
+
+		s, err = svc.init(ctx, session.Team)
+		if err != nil {
+			return err
+		}
+
+		svc.stateBySessionID[sessionID] = s
 	}
 
 	slog.Info("User joining session",

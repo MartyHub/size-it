@@ -58,7 +58,7 @@ func (hdl *handlerSSE) initSSE(c echo.Context) error {
 	header.Set(echo.HeaderCacheControl, "no-cache")
 	header.Set(echo.HeaderConnection, "keep-alive")
 
-	if err := hdl.svc.Join(hdl.session.ID, hdl.usr, hdl.events); err != nil {
+	if err := hdl.svc.Join(c.Request().Context(), hdl.session.ID, hdl.usr, hdl.events); err != nil {
 		return err
 	}
 
