@@ -21,26 +21,26 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 type Server struct {
+	Cfg      internal.Config
 	Clk      internal.Clock
 	Event    *live.Service
 	Repo     *db.Repository
-	cfg      internal.Config
 	e        *echo.Echo
 	shutdown chan struct{}
 }
 
 func NewServer(cfg internal.Config, repo *db.Repository) *Server {
 	res := &Server{
+		Cfg:      cfg,
 		Clk:      &internal.UTCClock{},
 		Repo:     repo,
-		cfg:      cfg,
 		e:        echo.New(),
 		shutdown: make(chan struct{}),
 	}
 
 	res.configure()
 
-	res.Event = live.NewService(res.e.Renderer, repo)
+	res.Event = live.NewService(cfg.Path, res.e.Renderer, repo)
 
 	return res
 }
@@ -88,7 +88,7 @@ func (srv *Server) configure() {
 	srv.e.HidePort = true
 	srv.e.HTTPErrorHandler = srv.httpErrorHandler()
 
-	if srv.cfg.Dev {
+	if srv.Cfg.Dev {
 		srv.e.Renderer = newLiveRenderer()
 	} else {
 		srv.e.Renderer = newEmbedRenderer()
@@ -107,7 +107,7 @@ func (srv *Server) start() {
 	slog.Info("Starting server...")
 
 	go func() {
-		if err := srv.e.Start(srv.cfg.Address()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.e.Start(srv.Cfg.Address()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			internal.LogError("Failed to start server", err)
 
 			os.Exit(1)
@@ -135,6 +135,7 @@ func (srv *Server) httpErrorHandler() echo.HTTPErrorHandler {
 		if strings.Contains(c.Request().Header.Get(echo.HeaderAccept), echo.MIMETextHTML) {
 			_ = c.Render(http.StatusOK, "error.gohtml", map[string]any{
 				"error": err.Error(),
+				"path":  srv.Cfg.Path,
 			})
 		} else {
 			switch {

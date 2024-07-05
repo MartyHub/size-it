@@ -2,7 +2,7 @@
 
     {{ template "navSession.gohtml" . }}
 
-    <div hx-ext="sse" sse-connect="/sessions/{{ .sessionID }}">
+    <div hx-ext="sse" sse-connect="{{ .path }}/sessions/{{ .sessionID }}">
 
         <section class="section">
 
@@ -14,7 +14,7 @@
                         <p class="control">
                             <button
                                     class="button is-primary px-6 is-small"
-                                    hx-post="/sessions/{{ .sessionID }}"
+                                    hx-post="{{ .path }}/sessions/{{ .sessionID }}"
                                     hx-swap="none"
                             >
                                 Save
@@ -23,7 +23,7 @@
                         <p class="control">
                             <button
                                     class="button is-danger px-6 is-small"
-                                    hx-put="/sessions/{{ .sessionID }}"
+                                    hx-put="{{ .path }}/sessions/{{ .sessionID }}"
                                     hx-swap="none"
                             >
                                 Reset
