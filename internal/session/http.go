@@ -1,6 +1,7 @@
 package session
 
 import (
+	"crypto/rand"
 	"errors"
 	"net/http"
 	"path"
@@ -9,6 +10,7 @@ import (
 	"github.com/MartyHub/size-it/internal/live"
 	"github.com/MartyHub/size-it/internal/server"
 	"github.com/labstack/echo/v4"
+	"github.com/oklog/ulid/v2"
 )
 
 const sseBufferSize = 8
@@ -83,13 +85,13 @@ func (hdl *handler) createOrJoinSession(c echo.Context) error {
 		return err
 	}
 
-	userID, err := internal.UserID()
+	userID, err := ulid.New(ulid.Now(), rand.Reader)
 	if err != nil {
 		return err
 	}
 
 	usr := internal.User{
-		ID:   userID,
+		ID:   userID.String(),
 		Name: input.Username,
 		Team: session.Team,
 	}

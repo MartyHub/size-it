@@ -2,13 +2,9 @@ package internal
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -18,8 +14,6 @@ const (
 	CookieName            = "sizeIt"
 
 	KeyUser contextKey = 1
-
-	userIDSize = 16
 )
 
 type (
@@ -31,18 +25,6 @@ type (
 
 	contextKey int
 )
-
-func UserID() (string, error) {
-	bytes := make([]byte, userIDSize)
-
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-
-	res := fmt.Sprintf("%s_%d", hex.EncodeToString(bytes), time.Now().UnixNano())
-
-	return res, nil
-}
 
 func SetCookie(c echo.Context, usr User) error {
 	data, err := json.Marshal(usr)
