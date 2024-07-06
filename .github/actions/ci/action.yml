@@ -1,0 +1,26 @@
+name: CI
+description: Continuous Integration
+runs:
+  using: "composite"
+  steps:
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: stable
+
+    - name: Setup sqlc
+      uses: sqlc-dev/setup-sqlc@v4
+      with:
+        sqlc-version: '1.26.0'
+
+    - name: Generate SQL code
+      shell: bash
+      run: sqlc generate --file internal/db/sqlc.yaml
+
+    - name: Lint
+      uses: golangci/golangci-lint-action@v6
+
+    - name: Test
+      shell: bash
+      run: go test -race -timeout 30s ./...

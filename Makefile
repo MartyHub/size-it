@@ -17,6 +17,9 @@ db_init: db_up
 db_down:
 	./scripts/db_down.sh
 
+docker:
+	podman build --tag martyhub/size-it:development .
+
 install:
 	go install github.com/cortesi/modd/cmd/modd@latest
 
