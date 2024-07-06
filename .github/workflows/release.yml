@@ -27,7 +27,7 @@ jobs:
         uses: ./.github/actions/ci
 
       - name: Build
-        run: go build -ldflags="-s -w -X 'github.com/MartyHub/size-it/internal/monitoring.Version=${{ github.ref_name }}'" -race
+        run: CGO_ENABLED=0 go build -ldflags="-s -w -X 'github.com/MartyHub/size-it/internal/monitoring.Version=${{ github.ref_name }}'"
 
       - name: Log in to the Container registry
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1

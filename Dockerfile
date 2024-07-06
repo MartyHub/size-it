@@ -1,4 +1,4 @@
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/base-nossl-debian12:nonroot
 
 COPY size-it /
 
