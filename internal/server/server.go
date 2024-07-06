@@ -137,16 +137,20 @@ func (srv *Server) httpErrorHandler() echo.HTTPErrorHandler {
 				"error": err.Error(),
 				"path":  srv.Cfg.Path,
 			})
-		} else {
-			switch {
-			case errors.Is(err, internal.ErrInvalidInput):
-				err = toHTTPError(err, http.StatusBadRequest)
-			case errors.Is(err, internal.ErrNotFound):
-				err = toHTTPError(err, http.StatusNotFound)
-			}
 
-			srv.e.DefaultHTTPErrorHandler(err, c)
+			return
 		}
+
+		switch {
+		case errors.Is(err, internal.ErrInvalidInput):
+			err = toHTTPError(err, http.StatusBadRequest)
+		case errors.Is(err, internal.ErrUnauthorized):
+			err = toHTTPError(err, http.StatusUnauthorized)
+		case errors.Is(err, internal.ErrNotFound):
+			err = toHTTPError(err, http.StatusNotFound)
+		}
+
+		srv.e.DefaultHTTPErrorHandler(err, c)
 	}
 }
 
