@@ -19,7 +19,7 @@ const (
 )
 
 type Service struct {
-	lock             sync.RWMutex
+	mu               sync.RWMutex
 	ntf              *notifier
 	repo             *db.Repository
 	stateBySessionID map[string]*state
@@ -37,8 +37,8 @@ func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
 }
 
 func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.User, events chan Event) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if found {
@@ -54,7 +54,7 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 	} else {
 		var err error
 
-		s, err = svc.doCreate(ctx, sessionID)
+		s, err = svc.init(ctx, sessionID)
 		if err != nil {
 			return err
 		}
@@ -92,8 +92,8 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 }
 
 func (svc *Service) Leave(sessionID string, usr internal.User) {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
@@ -120,30 +120,17 @@ func (svc *Service) Leave(sessionID string, usr internal.User) {
 	_ = svc.ntf.notifyResults(sessionID, s, allUsers())
 }
 
-func (svc *Service) Create(ctx context.Context, sessionID, team string) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
-
-	if _, found := svc.stateBySessionID[sessionID]; !found {
-		s, err := svc.init(ctx, team)
-		if err != nil {
-			return err
-		}
-
-		svc.stateBySessionID[sessionID] = s
-	}
-
-	return nil
-}
-
-func (svc *Service) SaveTicket(sessionID, summary, url string, usr internal.User) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+func (svc *Service) UpdateTicket(sessionID, summary, url string, usr internal.User) error {
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.Ticket.Summary = summary
 	s.Ticket.URL = url
@@ -152,13 +139,16 @@ func (svc *Service) SaveTicket(sessionID, summary, url string, usr internal.User
 }
 
 func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, usr internal.User) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	for _, res := range s.Results {
 		if res.User.Equals(usr) {
@@ -172,7 +162,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 		return nil
 	}
 
-	if err := svc.doSaveTicket(ctx, sessionID, s); err != nil {
+	if err := svc.saveTicket(ctx, sessionID, s); err != nil {
 		return err
 	}
 
@@ -187,13 +177,16 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 }
 
 func (svc *Service) ToggleSizings(sessionID string) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.Show = !s.Show
 
@@ -201,13 +194,16 @@ func (svc *Service) ToggleSizings(sessionID string) error {
 }
 
 func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType string) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.Ticket.SizingType = sizingType
 	s.Ticket.SizingValue = ""
@@ -235,13 +231,16 @@ func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType 
 }
 
 func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.User) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	for i, res := range s.Results {
 		if res.User.Equals(usr) {
@@ -263,13 +262,16 @@ func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.U
 }
 
 func (svc *Service) ResetSession(sessionID string) error {
-	svc.lock.Lock()
-	defer svc.lock.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
 		return fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	s.reset()
 
@@ -288,8 +290,17 @@ func (svc *Service) ResetSession(sessionID string) error {
 	return nil
 }
 
-func (svc *Service) init(ctx context.Context, team string) (*state, error) {
-	history, err := svc.history(ctx, team, defaultSizingType)
+func (svc *Service) init(ctx context.Context, sessionID string) (*state, error) {
+	session, err := svc.repo.Session(ctx, sessionID)
+	if err != nil {
+		if db.IsErrNoRows(err) {
+			return nil, fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
+		}
+
+		return nil, err
+	}
+
+	history, err := svc.history(ctx, session.Team, defaultSizingType)
 	if err != nil {
 		return nil, err
 	}
@@ -297,9 +308,11 @@ func (svc *Service) init(ctx context.Context, team string) (*state, error) {
 	res := &state{
 		History: history,
 		Results: make([]result, 0, 1),
-		Team:    team,
+		Team:    session.Team,
 		Ticket:  &ticket{SizingType: defaultSizingType},
 	}
+
+	svc.stateBySessionID[sessionID] = res
 
 	return res, nil
 }
@@ -339,7 +352,7 @@ func (svc *Service) history(ctx context.Context, team, sizingType string) ([]tic
 	return []ticket{}, nil
 }
 
-func (svc *Service) doSaveTicket(ctx context.Context, sessionID string, s *state) error {
+func (svc *Service) saveTicket(ctx context.Context, sessionID string, s *state) error {
 	if s.Ticket.ID > 0 {
 		slog.Info("Updating ticket...",
 			slog.String("session", sessionID),
@@ -373,26 +386,6 @@ func (svc *Service) doSaveTicket(ctx context.Context, sessionID string, s *state
 	}
 
 	return nil
-}
-
-func (svc *Service) doCreate(ctx context.Context, sessionID string) (*state, error) {
-	session, err := svc.repo.Session(ctx, sessionID)
-	if err != nil {
-		if db.IsErrNoRows(err) {
-			return nil, fmt.Errorf("%w: session %s", internal.ErrNotFound, sessionID)
-		}
-
-		return nil, err
-	}
-
-	s, err := svc.init(ctx, session.Team)
-	if err != nil {
-		return nil, err
-	}
-
-	svc.stateBySessionID[sessionID] = s
-
-	return s, nil
 }
 
 func allUsers() notifyUserFunc {

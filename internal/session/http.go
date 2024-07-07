@@ -28,7 +28,7 @@ func Register(srv *server.Server) {
 	srv.POST("/sessions", hdl.createOrJoinSession)
 
 	srv.GET("/sessions/:id", hdl.getSession)
-	srv.PATCH("/sessions/:id", hdl.saveTicket)
+	srv.PATCH("/sessions/:id", hdl.updateTicket)
 	srv.POST("/sessions/:id", hdl.addTicketToHistory)
 	srv.PUT("/sessions/:id", hdl.resetSession)
 
@@ -154,10 +154,6 @@ func (hdl *handler) getSession(c echo.Context) error {
 		return hdlSSE.handle(c)
 	}
 
-	if err = hdl.event.Create(ctx, session.ID, session.Team); err != nil {
-		return err
-	}
-
 	return c.Render(http.StatusOK, "session.gohtml", map[string]any{
 		"path":                   hdl.path,
 		"session":                session,
@@ -168,7 +164,7 @@ func (hdl *handler) getSession(c echo.Context) error {
 	})
 }
 
-func (hdl *handler) saveTicket(c echo.Context) error {
+func (hdl *handler) updateTicket(c echo.Context) error {
 	input, err := internal.Bind[PatchSessionInput](c)
 	if err != nil {
 		return err
@@ -181,7 +177,7 @@ func (hdl *handler) saveTicket(c echo.Context) error {
 		return err
 	}
 
-	if err = hdl.event.SaveTicket(input.SessionID, input.Summary, input.URL, usr); err != nil {
+	if err = hdl.event.UpdateTicket(input.SessionID, input.Summary, input.URL, usr); err != nil {
 		return err
 	}
 

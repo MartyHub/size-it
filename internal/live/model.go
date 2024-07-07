@@ -3,6 +3,7 @@ package live
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/MartyHub/size-it/internal"
 )
@@ -24,6 +25,7 @@ type (
 	}
 
 	state struct {
+		mu      sync.RWMutex
 		Ticket  *ticket
 		History []ticket
 		Results []result
