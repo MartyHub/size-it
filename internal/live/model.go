@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/MartyHub/size-it/internal"
 )
@@ -25,7 +26,7 @@ type (
 	}
 
 	state struct {
-		mu      sync.RWMutex
+		mu      sync.Mutex
 		Ticket  *ticket
 		History []ticket
 		Results []result
@@ -42,9 +43,11 @@ type (
 	}
 
 	result struct {
-		events chan Event
-		User   internal.User
-		Sizing string
+		events          chan Event
+		inactive        bool
+		maxInactiveTime time.Time
+		User            internal.User
+		Sizing          string
 	}
 )
 
@@ -70,6 +73,27 @@ func (s *state) SizingValue(usr internal.User) string {
 	return ""
 }
 
+func (s *state) userJoin(usr internal.User, events chan Event) {
+	for i, res := range s.Results {
+		if res.User.Equals(usr) {
+			close(res.events)
+
+			s.Results[i] = result{
+				events: events,
+				User:   usr,
+				Sizing: res.Sizing,
+			}
+
+			return
+		}
+	}
+
+	s.Results = append(s.Results, result{
+		User:   usr,
+		events: events,
+	})
+}
+
 func (s *state) reset() {
 	s.Ticket.ID = 0
 	s.Ticket.Summary = ""
@@ -83,10 +107,24 @@ func (s *state) reset() {
 	}
 }
 
+func (s *state) empty() bool {
+	for _, res := range s.Results {
+		if !res.inactive {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (tck ticket) New() bool {
 	return tck.ID == 0
 }
 
-func (tck ticket) Valid() bool {
+func (tck ticket) valid() bool {
 	return tck.Summary != "" && tck.SizingValue != ""
+}
+
+func (res result) Hide() bool {
+	return res.inactive
 }

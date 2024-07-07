@@ -25,7 +25,11 @@ func (hdl *handlerSSE) handle(c echo.Context) error {
 	for {
 		select {
 		case <-hdl.done:
-			// server is shutting down
+			slog.Info("Server is shutting down, stopping SSE...",
+				slog.String(internal.LogKeyUser, hdl.usr.Name),
+				slog.String("session", hdl.session.ID),
+			)
+
 			return nil
 		case <-c.Request().Context().Done():
 			// client is gone
@@ -35,8 +39,8 @@ func (hdl *handlerSSE) handle(c echo.Context) error {
 		case evt, ok := <-hdl.events:
 			if !ok {
 				slog.Info("User left session without notice",
+					slog.String(internal.LogKeySession, hdl.session.ID),
 					slog.String(internal.LogKeyUser, hdl.usr.Name),
-					slog.String("session", hdl.session.ID),
 				)
 
 				return nil

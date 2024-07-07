@@ -90,14 +90,14 @@ func (hdl *handler) createOrJoinSession(c echo.Context) error {
 
 	usr, err := internal.GetUser(ctx)
 	if err != nil {
-		if errors.Is(err, internal.ErrUnauthorized) {
-			usr.ID, err = db.NewID()
-			if err != nil {
-				return err
-			}
+		if !errors.Is(err, internal.ErrUnauthorized) {
+			return err
 		}
 
-		return err
+		usr.ID, err = db.NewID()
+		if err != nil {
+			return err
+		}
 	}
 
 	usr.Name = input.Username

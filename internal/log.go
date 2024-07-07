@@ -7,9 +7,11 @@ import (
 
 const (
 	LogKeyError   = "error"
+	LogKeyEvent   = "event"
 	LogKeyLatency = "latency"
 	LogKeyMethod  = "method"
 	LogKeyURI     = "uri"
+	LogKeySession = "session"
 	LogKeyStatus  = "status"
 	LogKeyUser    = "user"
 )

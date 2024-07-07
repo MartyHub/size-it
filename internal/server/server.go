@@ -40,7 +40,7 @@ func NewServer(cfg internal.Config, repo *db.Repository) *Server {
 
 	res.configure()
 
-	res.Event = live.NewService(cfg.Path, res.e.Renderer, repo)
+	res.Event = live.NewService(res.shutdown, cfg, res.Clk, res.e.Renderer, repo)
 
 	return res
 }

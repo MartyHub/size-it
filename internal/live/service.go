@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
+	"time"
 
 	"github.com/MartyHub/size-it/internal"
 	"github.com/MartyHub/size-it/internal/db"
@@ -18,42 +18,54 @@ const (
 	maxBucketSize     = 5
 )
 
-type Service struct {
-	mu               sync.RWMutex
-	ntf              *notifier
-	repo             *db.Repository
-	stateBySessionID map[string]*state
+var allActiveUsers notifyUserFunc = func(res result) bool { //nolint:gochecknoglobals
+	return !res.inactive
 }
 
-func NewService(path string, rdr echo.Renderer, repo *db.Repository) *Service {
-	return &Service{
+type Service struct {
+	done             <-chan struct{}
+	maxInactiveTime  time.Duration
+	mu               sync.RWMutex
+	stateBySessionID map[string]*state
+
+	clk  internal.Clock
+	ntf  *notifier
+	repo *db.Repository
+}
+
+func NewService(
+	done <-chan struct{},
+	cfg internal.Config,
+	clk internal.Clock,
+	rdr echo.Renderer,
+	repo *db.Repository,
+) *Service {
+	res := &Service{
+		clk:             clk,
+		done:            done,
+		maxInactiveTime: cfg.MaxInactiveTime,
 		ntf: &notifier{
-			path: path,
+			path: cfg.Path,
+			clk:  clk,
 			rdr:  rdr,
 		},
 		repo:             repo,
 		stateBySessionID: make(map[string]*state),
 	}
+
+	go res.startRemoveEmptySessions(cfg.EmptySessionsTick)
+
+	return res
 }
 
 func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.User, events chan Event) error {
+	var err error
+
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
 
 	s, found := svc.stateBySessionID[sessionID]
-	if found {
-		s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-			if res.User.Equals(usr) {
-				close(res.events)
-
-				return true
-			}
-
-			return false
-		})
-	} else {
-		var err error
-
+	if !found {
 		s, err = svc.init(ctx, sessionID)
 		if err != nil {
 			return err
@@ -61,30 +73,30 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 	}
 
 	slog.Info("User joining session",
+		slog.String(internal.LogKeySession, sessionID),
 		slog.String(internal.LogKeyUser, usr.Name),
-		slog.String("session", sessionID),
 	)
 
-	s.Results = append(s.Results, result{
-		User:   usr,
-		events: events,
-	})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.userJoin(usr, events)
 
 	notifyUser := includeUser(usr)
 
-	if err := svc.ntf.notifyTicket(sessionID, s, notifyUser); err != nil {
+	if err = svc.ntf.notifyTicket(sessionID, s, notifyUser); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyTabs(sessionID, s, notifyUser, false); err != nil {
+	if err = svc.ntf.notifyTabs(sessionID, s, notifyUser, false); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyHistory(sessionID, s, notifyUser); err != nil {
+	if err = svc.ntf.notifyHistory(sessionID, s, notifyUser); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
+	if err = svc.ntf.notifyResults(sessionID, s); err != nil {
 		return err
 	}
 
@@ -92,8 +104,8 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 }
 
 func (svc *Service) Leave(sessionID string, usr internal.User) {
-	svc.mu.Lock()
-	defer svc.mu.Unlock()
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
 
 	s, found := svc.stateBySessionID[sessionID]
 	if !found {
@@ -101,23 +113,22 @@ func (svc *Service) Leave(sessionID string, usr internal.User) {
 	}
 
 	slog.Info("User leaving session",
+		slog.String(internal.LogKeySession, sessionID),
 		slog.String(internal.LogKeyUser, usr.Name),
-		slog.String("session", sessionID),
 	)
 
-	s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-		return res.User.Equals(usr)
-	})
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	if len(s.Results) == 0 {
-		slog.Info("Closing session", slog.String("session", sessionID))
+	for i, res := range s.Results {
+		if res.User.Equals(usr) {
+			s.Results[i].maxInactiveTime = svc.clk.Now().Add(svc.maxInactiveTime)
 
-		delete(svc.stateBySessionID, sessionID)
+			go svc.startDeactivateUsers(sessionID, s)
 
-		return
+			return
+		}
 	}
-
-	_ = svc.ntf.notifyResults(sessionID, s, allUsers())
 }
 
 func (svc *Service) UpdateTicket(sessionID, summary, url string, usr internal.User) error {
@@ -158,7 +169,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 		}
 	}
 
-	if !s.Ticket.Valid() {
+	if !s.Ticket.valid() {
 		return nil
 	}
 
@@ -173,7 +184,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 
 	s.History = history
 
-	return svc.ntf.notifyHistory(sessionID, s, allUsers())
+	return svc.ntf.notifyHistory(sessionID, s, allActiveUsers)
 }
 
 func (svc *Service) ToggleSizings(sessionID string) error {
@@ -190,7 +201,7 @@ func (svc *Service) ToggleSizings(sessionID string) error {
 
 	s.Show = !s.Show
 
-	return svc.ntf.notifyResults(sessionID, s, allUsers())
+	return svc.ntf.notifyResults(sessionID, s)
 }
 
 func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType string) error {
@@ -212,11 +223,11 @@ func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType 
 		s.Results[i].Sizing = ""
 	}
 
-	if err := svc.ntf.notifyTabs(sessionID, s, allUsers(), false); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, allActiveUsers, false); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s); err != nil {
 		return err
 	}
 
@@ -227,7 +238,7 @@ func (svc *Service) SwitchSizingType(ctx context.Context, sessionID, sizingType 
 
 	s.History = history
 
-	return svc.ntf.notifyHistory(sessionID, s, allUsers())
+	return svc.ntf.notifyHistory(sessionID, s, allActiveUsers)
 }
 
 func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.User) error {
@@ -254,7 +265,7 @@ func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.U
 		return err
 	}
 
-	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s); err != nil {
 		return err
 	}
 
@@ -275,15 +286,15 @@ func (svc *Service) ResetSession(sessionID string) error {
 
 	s.reset()
 
-	if err := svc.ntf.notifyTicket(sessionID, s, allUsers()); err != nil {
+	if err := svc.ntf.notifyTicket(sessionID, s, allActiveUsers); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyTabs(sessionID, s, allUsers(), false); err != nil {
+	if err := svc.ntf.notifyTabs(sessionID, s, allActiveUsers, false); err != nil {
 		return err
 	}
 
-	if err := svc.ntf.notifyResults(sessionID, s, allUsers()); err != nil {
+	if err := svc.ntf.notifyResults(sessionID, s); err != nil {
 		return err
 	}
 
@@ -355,7 +366,7 @@ func (svc *Service) history(ctx context.Context, team, sizingType string) ([]tic
 func (svc *Service) saveTicket(ctx context.Context, sessionID string, s *state) error {
 	if s.Ticket.ID > 0 {
 		slog.Info("Updating ticket...",
-			slog.String("session", sessionID),
+			slog.String(internal.LogKeySession, sessionID),
 			slog.Int64("ticketID", s.Ticket.ID),
 		)
 
@@ -369,7 +380,7 @@ func (svc *Service) saveTicket(ctx context.Context, sessionID string, s *state) 
 			return err
 		}
 	} else {
-		slog.Info("Creating ticket...", slog.String("session", sessionID))
+		slog.Info("Creating ticket...", slog.String(internal.LogKeySession, sessionID))
 
 		tck, err := svc.repo.CreateTicket(ctx, sqlc.CreateTicketParams{
 			Summary:     s.Ticket.Summary,
@@ -388,21 +399,92 @@ func (svc *Service) saveTicket(ctx context.Context, sessionID string, s *state) 
 	return nil
 }
 
-func allUsers() notifyUserFunc {
-	return func(_ internal.User) bool {
-		return true
+func (svc *Service) startRemoveEmptySessions(d time.Duration) {
+	slog.Info("Starting empty sessions remover", slog.String("tick", d.String()))
+
+	ticker := time.NewTicker(d)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-svc.done:
+			slog.Info("Server is shutting down, stopping empty sessions remover...")
+
+			return
+		case <-ticker.C:
+			svc.removeEmptySessions()
+		}
+	}
+}
+
+func (svc *Service) removeEmptySessions() {
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+
+	slog.Info("Removing empty sessions...")
+
+	for sessionID, s := range svc.stateBySessionID {
+		if s.empty() {
+			slog.Info("Removing session...", slog.String(internal.LogKeySession, sessionID))
+
+			delete(svc.stateBySessionID, sessionID)
+		}
+	}
+}
+
+func (svc *Service) startDeactivateUsers(sessionID string, s *state) {
+	slog.Info("Starting users deactivation", slog.String("tick", svc.maxInactiveTime.String()))
+
+	ticker := time.NewTicker(svc.maxInactiveTime)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-svc.done:
+			slog.Info("Server is shutting down, stopping cleaner...")
+
+			return
+		case <-ticker.C:
+			svc.deactivateUsers(sessionID, s)
+
+			return
+		}
+	}
+}
+
+func (svc *Service) deactivateUsers(sessionID string, s *state) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	notify := false
+	now := svc.clk.Now()
+
+	for i, res := range s.Results {
+		if !res.maxInactiveTime.IsZero() && res.maxInactiveTime.Before(now) {
+			slog.Info("Marking user as inactive",
+				slog.String(internal.LogKeySession, sessionID),
+				slog.String(internal.LogKeyUser, res.User.Name),
+			)
+
+			s.Results[i].inactive = true
+			notify = true
+		}
+	}
+
+	if notify {
+		_ = svc.ntf.notifyResults(sessionID, s)
 	}
 }
 
 func includeUser(usr internal.User) notifyUserFunc {
-	return func(remoteUser internal.User) bool {
-		return remoteUser.Equals(usr)
+	return func(res result) bool {
+		return !res.inactive && res.User.Equals(usr)
 	}
 }
 
 func excludeUser(usr internal.User) notifyUserFunc {
-	return func(remoteUser internal.User) bool {
-		return !remoteUser.Equals(usr)
+	return func(res result) bool {
+		return !res.inactive && !res.User.Equals(usr)
 	}
 }
 

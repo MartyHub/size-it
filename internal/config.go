@@ -3,16 +3,19 @@ package internal
 import (
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
-	DatabaseURL string
-	Dev         bool
-	Host        string
-	Path        string
-	Port        int `envDefault:"8080"`
+	DatabaseURL       string
+	Dev               bool
+	EmptySessionsTick time.Duration `envDefault:"1h"`
+	Host              string
+	MaxInactiveTime   time.Duration `envDefault:"5s"`
+	Path              string
+	Port              int `envDefault:"8080"`
 }
 
 func ParseConfig() (Config, error) {

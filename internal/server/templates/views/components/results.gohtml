@@ -22,6 +22,9 @@
         </thead>
         <tbody>
         {{ range $result := .state.Results }}
+            {{ if $result.Hide }}
+                {{ continue }}
+            {{ end }}
             <tr>
                 <td>{{ $result.User.Name }}</td>
                 <td class="has-text-centered">

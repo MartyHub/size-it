@@ -11,10 +11,12 @@ import (
 type (
 	notifier struct {
 		path string
-		rdr  echo.Renderer
+
+		clk internal.Clock
+		rdr echo.Renderer
 	}
 
-	notifyUserFunc func(remoteUser internal.User) bool
+	notifyUserFunc func(res result) bool
 )
 
 func (ntf *notifier) notifyTicket(sessionID string, s *state, notifyUser notifyUserFunc) error {
@@ -33,12 +35,12 @@ func (ntf *notifier) notifyHistory(sessionID string, s *state, notifyUser notify
 	return ntf.notify(sessionID, "history", "components/history.gohtml", s, notifyUser)
 }
 
-func (ntf *notifier) notifyResults(sessionID string, s *state, notifyUser notifyUserFunc) error {
-	return ntf.notify(sessionID, "results", "components/results.gohtml", s, notifyUser)
+func (ntf *notifier) notifyResults(sessionID string, s *state) error {
+	return ntf.notify(sessionID, "results", "components/results.gohtml", s, allActiveUsers)
 }
 
 func (ntf *notifier) notify(sessionID, kind, template string, s *state, notifyUser notifyUserFunc) error {
-	slog.Info("Broadcasting...", slog.String("event", kind))
+	slog.Info("Broadcasting...", slog.String(internal.LogKeyEvent, kind))
 
 	var buf bytes.Buffer
 
@@ -61,7 +63,7 @@ func (ntf *notifier) notify(sessionID, kind, template string, s *state, notifyUs
 	}
 
 	for _, res := range s.Results {
-		if notifyUser(res.User) {
+		if notifyUser(res) {
 			res.events <- evt
 		}
 	}
@@ -72,10 +74,10 @@ func (ntf *notifier) notify(sessionID, kind, template string, s *state, notifyUs
 func (ntf *notifier) notifyByUser(sessionID, kind, template string, s *state, notifyUser notifyUserFunc) error {
 	var buf bytes.Buffer
 
-	slog.Info("Broadcasting by user...", slog.String("event", kind))
+	slog.Info("Broadcasting by user...", slog.String(internal.LogKeyEvent, kind))
 
 	for _, res := range s.Results {
-		if !notifyUser(res.User) {
+		if !notifyUser(res) {
 			continue
 		}
 
