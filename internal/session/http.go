@@ -1,16 +1,15 @@
 package session
 
 import (
-	"crypto/rand"
 	"errors"
 	"net/http"
 	"path"
 
 	"github.com/MartyHub/size-it/internal"
+	"github.com/MartyHub/size-it/internal/db"
 	"github.com/MartyHub/size-it/internal/live"
 	"github.com/MartyHub/size-it/internal/server"
 	"github.com/labstack/echo/v4"
-	"github.com/oklog/ulid/v2"
 )
 
 const sseBufferSize = 8
@@ -25,14 +24,18 @@ func Register(srv *server.Server) {
 	}
 
 	srv.GET("/", hdl.root)
+
 	srv.POST("/sessions", hdl.createOrJoinSession)
+
 	srv.GET("/sessions/:id", hdl.getSession)
 	srv.PATCH("/sessions/:id", hdl.saveTicket)
 	srv.POST("/sessions/:id", hdl.addTicketToHistory)
 	srv.PUT("/sessions/:id", hdl.resetSession)
+
 	srv.PATCH("/sessions/:id/toggle", hdl.toggleSizings)
 	srv.PATCH("/sessions/:id/:sizingType", hdl.switchSizingType)
 	srv.PATCH("/sessions/:id/:sizingType/:sizingValue", hdl.setSizingValue)
+	srv.GET("/sessions/:id/user", hdl.updateUser)
 }
 
 const mimeSSE = "text/event-stream"
@@ -85,16 +88,20 @@ func (hdl *handler) createOrJoinSession(c echo.Context) error {
 		return err
 	}
 
-	userID, err := ulid.New(ulid.Now(), rand.Reader)
+	usr, err := internal.GetUser(ctx)
 	if err != nil {
+		if errors.Is(err, internal.ErrUnauthorized) {
+			usr.ID, err = db.NewID()
+			if err != nil {
+				return err
+			}
+		}
+
 		return err
 	}
 
-	usr := internal.User{
-		ID:   userID.String(),
-		Name: input.Username,
-		Team: session.Team,
-	}
+	usr.Name = input.Username
+	usr.Team = session.Team
 
 	if err = internal.SetCookie(c, usr); err != nil {
 		return err
@@ -270,4 +277,29 @@ func (hdl *handler) resetSession(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusOK)
+}
+
+func (hdl *handler) updateUser(c echo.Context) error {
+	input, err := internal.Bind[GetSessionInput](c)
+	if err != nil {
+		return err
+	}
+
+	ctx := c.Request().Context()
+
+	session, err := hdl.svc.get(ctx, input.ID)
+	if err != nil {
+		return err
+	}
+
+	usr, err := internal.GetUser(ctx)
+	if err != nil && !errors.Is(err, internal.ErrUnauthorized) {
+		return err
+	}
+
+	return c.Render(http.StatusOK, "joinSession.gohtml", map[string]any{
+		"path":    hdl.path,
+		"session": session,
+		"user":    usr,
+	})
 }

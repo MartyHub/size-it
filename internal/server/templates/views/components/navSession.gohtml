@@ -36,8 +36,10 @@
         </div>
         <div class="navbar-end">
             <div class="navbar-item">
-                <i class="bi bi-person-circle"></i>
-                <span class="ml-2">{{ .user.Name }}</span>
+                <a class="button is-link is-small" href="{{ .path }}/sessions/{{ .session.ID }}/user">
+                    <i class="bi bi-person-circle mr-2"></i>
+                    {{ .user.Name }}
+                </a>
             </div>
         </div>
     </div>

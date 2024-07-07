@@ -26,6 +26,10 @@ type (
 	contextKey int
 )
 
+func (usr User) Equals(other User) bool {
+	return usr.ID == other.ID
+}
+
 func SetCookie(c echo.Context, usr User) error {
 	data, err := json.Marshal(usr)
 	if err != nil {

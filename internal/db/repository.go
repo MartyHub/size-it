@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/tern/v2/migrate"
+	"github.com/oklog/ulid/v2"
 )
 
 //go:embed migration/*.sql
@@ -107,4 +109,13 @@ func (repo *Repository) doMigrate(ctx context.Context, conn *pgx.Conn) error {
 
 func IsErrNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
+}
+
+func NewID() (string, error) {
+	id, err := ulid.New(ulid.Now(), rand.Reader)
+	if err != nil {
+		return "", err
+	}
+
+	return id.String(), nil
 }

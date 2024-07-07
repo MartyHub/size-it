@@ -43,7 +43,7 @@ func (svc *Service) Join(ctx context.Context, sessionID string, usr internal.Use
 	s, found := svc.stateBySessionID[sessionID]
 	if found {
 		s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-			if res.User == usr {
+			if res.User.Equals(usr) {
 				close(res.events)
 
 				return true
@@ -106,10 +106,12 @@ func (svc *Service) Leave(sessionID string, usr internal.User) {
 	)
 
 	s.Results = slices.DeleteFunc(s.Results, func(res result) bool {
-		return res.User == usr
+		return res.User.Equals(usr)
 	})
 
 	if len(s.Results) == 0 {
+		slog.Info("Closing session", slog.String("session", sessionID))
+
 		delete(svc.stateBySessionID, sessionID)
 
 		return
@@ -159,7 +161,7 @@ func (svc *Service) AddTicketToHistory(ctx context.Context, sessionID string, us
 	}
 
 	for _, res := range s.Results {
-		if res.User == usr {
+		if res.User.Equals(usr) {
 			s.Ticket.SizingValue = res.Sizing
 
 			break
@@ -242,7 +244,7 @@ func (svc *Service) SetSizingValue(sessionID, sizingValue string, usr internal.U
 	}
 
 	for i, res := range s.Results {
-		if res.User == usr {
+		if res.User.Equals(usr) {
 			s.Results[i].Sizing = sizingValue
 
 			break
@@ -401,13 +403,13 @@ func allUsers() notifyUserFunc {
 
 func includeUser(usr internal.User) notifyUserFunc {
 	return func(remoteUser internal.User) bool {
-		return remoteUser == usr
+		return remoteUser.Equals(usr)
 	}
 }
 
 func excludeUser(usr internal.User) notifyUserFunc {
 	return func(remoteUser internal.User) bool {
-		return remoteUser != usr
+		return !remoteUser.Equals(usr)
 	}
 }
 

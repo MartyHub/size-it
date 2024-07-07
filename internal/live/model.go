@@ -60,7 +60,7 @@ func (evt Event) Write(w io.Writer) error {
 
 func (s *state) SizingValue(usr internal.User) string {
 	for _, res := range s.Results {
-		if res.User == usr {
+		if res.User.Equals(usr) {
 			return res.Sizing
 		}
 	}
